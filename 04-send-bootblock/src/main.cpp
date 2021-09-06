@@ -3,12 +3,14 @@
 #include <adamnet.h>
 #include <globals.h>
 #include <macros.h>
+#include <queue>
 
 byte b;
 byte dev;
 byte cmd;
 byte transferCommand[9];
 byte status[6] = { 0x84, 0x00, 0x04, 0x01, 0x40, 0x45 };
+std::queue<byte> rxQueue;
 
 unsigned long longblock;
 unsigned short block;
@@ -109,13 +111,63 @@ byte testBlock[1028] =
 };
 
 /**
+ * AdamNet RX ISR
+ */
+void adamnet_rx_isr()
+{
+  byte incomingByte=0;
+
+  ets_delay_us(16); // wait 1 bit cell.
+
+  // Get Data Bits
+  for (byte i=8; i > 0; --i)
+  {
+    incomingByte >>= 1;
+    if (digitalRead(PIN_ADAMNET_RX) == LOW) // low transition = 1 bit (inverted)
+      incomingByte |= 0x80;
+    else
+      incomingByte |= 0x00;
+    ets_delay_us(16); // Wait for next bit cell
+  }
+
+  // Wait for stop bit to finish
+  rxQueue.push(incomingByte);
+  ets_delay_us(16);
+}
+
+/**
  * Send byte, then receive it, to get rid of the echo
  * @param b Byte to send
  */
 void adamnet_send(byte b)
 {
-  SERIAL_ADAMNET.write(b);
-  while (SERIAL_ADAMNET.available() == 0) { yield(); }
+  // Send Start Bit
+  digitalWrite(PIN_ADAMNET_TX,LOW);
+
+  for (byte mask = 0x01; mask>0; mask <<= 1)
+  {
+    if (b & mask)
+      digitalWrite(PIN_ADAMNET_TX,LOW);
+    else
+      digitalWrite(PIN_ADAMNET_TX,HIGH);
+    
+    ets_delay_us(16); // Wait for one bit cell.
+  }
+
+  // Send Stop Bit
+  digitalWrite(PIN_ADAMNET_RX,HIGH); // for one bit cell.
+  ets_delay_us(16);
+}
+
+/**
+ * Send string of bytes
+ * @param buffer Buffer
+ * @param len Length
+ */
+void adamnet_send_bytes(byte *b, int len)
+{
+  for (int i=0;i<len;i++)
+    adamnet_send(b[i]);
 }
 
 /**
@@ -124,8 +176,29 @@ void adamnet_send(byte b)
  */
 byte adamnet_recv()
 {
-  while (SERIAL_ADAMNET.available() == 0) { yield(); }
-  return SERIAL_ADAMNET.read();
+  byte b = rxQueue.front();
+  rxQueue.pop();
+  return b;
+}
+
+/**
+ * Receive buffer of bytes.
+ * @param buffer Buffer
+ * @param len length
+ */
+void adamnet_recv_bytes(byte *b, int len)
+{
+  for (int i=0;i<len;i++)
+    b[i] = adamnet_recv();
+}
+
+/**
+ * Is there anything available?
+ * @return true if data availble
+ */
+bool adamnet_available()
+{
+  return (!rxQueue.empty());
 }
 
 /**
@@ -138,6 +211,8 @@ void setup_pins()
   pinMode(PIN_LED_BT, OUTPUT);
   pinMode(PIN_LED_SIO, OUTPUT);
   pinMode(PIN_LED_WIFI, OUTPUT);
+  
+  digitalWrite(PIN_ADAMNET_TX,HIGH); // So we don't contend the bus.
 }
 
 /**
@@ -162,16 +237,12 @@ void wait_for_idle()
 
   do
   {
-    /* Drain the AdamNet RX buffer. */
-    while (SERIAL_ADAMNET.available())
-    {
-      SERIAL_ADAMNET.read(); // Drain
-    }
+    while (digitalRead(PIN_ADAMNET_RX) == HIGH) { yield(); }
 
     start = micros();
 
     /* Wait for 2000us for idle */
-    while (!SERIAL_ADAMNET.available())
+    while ((digitalRead(PIN_ADAMNET_RX)) == LOW && (isIdle == false))
     {
       current = micros();
 
@@ -207,8 +278,9 @@ void command_status()
 {
   SERIAL_DEBUG.printf("command_status()\n");
   ets_delay_us(150); 
-  SERIAL_ADAMNET.write(status,sizeof(status));
+  adamnet_send_bytes(status,sizeof(status));
   b = adamnet_recv(); // Get the Ack
+  SERIAL_DEBUG.printf("ACK! %02x",b);
 }
 
 /**
@@ -217,7 +289,7 @@ void command_status()
 void command_cts()
 {
   // We don't need to do a delay here, are we sure?
-  SERIAL_ADAMNET.write(testBlock,sizeof(testBlock)); // send the test block
+  adamnet_send_bytes(testBlock,sizeof(testBlock)); // send the test block
   b = adamnet_recv();
 
   switch (GET_COMMAND(b))
@@ -285,7 +357,7 @@ void command_ready()
   adamnet_send(BYTE_ACK);
 
   // Get the data transfer command
-  SERIAL_ADAMNET.readBytes(transferCommand, sizeof(transferCommand));
+  adamnet_recv_bytes(transferCommand, sizeof(transferCommand));
 
   switch (transferCommand[0] >> 4)
   {
@@ -321,9 +393,6 @@ void setup_serial_ports()
 {
   // Set up debug UART
   SERIAL_DEBUG.begin(921600);
-
-  // Set up AdamNet UART
-  SERIAL_ADAMNET.begin(62500, SERIAL_8N1, PIN_ADAMNET_RX, PIN_ADAMNET_TX);
 }
 
 void setup()
@@ -331,12 +400,13 @@ void setup()
   setup_pins();
   turn_off_all_leds();
   setup_serial_ports();
+  attachInterrupt(digitalPinToInterrupt(PIN_ADAMNET_RX),adamnet_rx_isr,RISING);
   SERIAL_DEBUG.printf("\n\n\n#FujiNet AdamNet Test #4\n\n Ready.\n");
 }
 
 void loop()
 {
-  if ((SERIAL_ADAMNET.available()) && is_it_for_me())
+  if (adamnet_available() && is_it_for_me())
     command();
   else
     wait_for_idle();
