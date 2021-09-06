@@ -191,6 +191,7 @@ bool is_it_for_me()
 
   if (GET_DEVICE_ID(b) == MY_DEVICE)
   {
+    SERIAL_DEBUG.printf("For me\n");
     dev = GET_DEVICE_ID(b);
     cmd = GET_COMMAND(b);
     return true;
@@ -204,6 +205,7 @@ bool is_it_for_me()
  */
 void command_status()
 {
+  SERIAL_DEBUG.printf("command_status()\n");
   ets_delay_us(150); 
   SERIAL_ADAMNET.write(status,sizeof(status));
   b = adamnet_recv(); // Get the Ack
@@ -298,6 +300,8 @@ void command_ready()
  */
 void command()
 {
+  digitalWrite(PIN_LED_SIO,LOW);
+  SERIAL_DEBUG.printf("command(%02x)\n",cmd);
   switch (cmd)
   {
   case COMMAND_CONTROL_STATUS:
@@ -307,6 +311,7 @@ void command()
     command_ready();
     break;
   }
+  digitalWrite(PIN_LED_SIO,HIGH);
 }
 
 /**
@@ -326,6 +331,7 @@ void setup()
   setup_pins();
   turn_off_all_leds();
   setup_serial_ports();
+  SERIAL_DEBUG.printf("\n\n\n#FujiNet AdamNet Test #4\n\n Ready.\n");
 }
 
 void loop()
