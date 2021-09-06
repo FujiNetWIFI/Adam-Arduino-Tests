@@ -12,6 +12,7 @@ byte status[6] = { 0x84, 0x00, 0x04, 0x01, 0x40, 0x45 };
 
 unsigned long longblock;
 unsigned short block;
+bool isIdle=false;
 
 byte testBlock[1028] = 
 {
@@ -115,7 +116,7 @@ byte testBlock[1028] =
 void adamnet_send(byte b)
 {
   SERIAL_ADAMNET.write(b);
-  while (SERIAL_ADAMNET.available() == 0) { yield(); }
+  SERIAL_ADAMNET.read();
 }
 
 /**
@@ -158,7 +159,6 @@ void wait_for_idle()
 {
   unsigned long start;
   unsigned long current;
-  bool isIdle;
 
   do
   {
@@ -176,7 +176,10 @@ void wait_for_idle()
       current = micros();
 
       if (current - start > 2000)
+      {
         isIdle = true;
+        Serial.printf("Now Idle\n\n");
+      }
     }
   } while (isIdle == false);
 }
