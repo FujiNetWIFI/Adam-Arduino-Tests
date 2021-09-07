@@ -34,7 +34,8 @@ void setup()
   pinMode(2, OUTPUT);
   pinMode(4, OUTPUT);
   pinMode(13, OUTPUT);
-  digitalWrite(TXD2,HIGH); // so we don't contend the adamnet.
+  pinMode(RXD2,INPUT);
+  pinMode(TXD2,OUTPUT);
   digitalWrite(2, 1);
   digitalWrite(4, 1);
   digitalWrite(13, 1);
@@ -54,32 +55,18 @@ unsigned char getSingleByte()
 
 void loop()
 {
-  if (Serial2.available())
+  while (Serial2.available())
   {
-    unsigned char b = Serial2.read();
-    unsigned char dev = b & 0x0F;
-    
-    if (dev == 0x04)
+    unsigned char b = Serial2.read(); // Get Node ID and Command
+    Serial.printf("%02X ",b);
+    if ((b & 0x0f) == 4) // For me?
     {
-      unsigned char cmd = b >> 4;
-
-      if (cmd == 0x0D)
+      Serial.printf("For me. command is %02x \n",(b >> 4));
+      while (Serial2.available())
       {
-        unsigned char transferCommand[9];
-
-        Serial.printf("CMD: Ready\n");
-        getSingleByte();
-        Serial2.readBytes(transferCommand,9);
-        if ((transferCommand[0]>>4) == 0x06)
-        {
-          unsigned long wantedBlock = ( (unsigned long)(transferCommand[6] << 24) | (unsigned long)(transferCommand[5] << 16) | (unsigned long)(transferCommand[4] << 8) | (unsigned long)(transferCommand[3]));
-          unsigned short shortBlock = (unsigned long)wantedBlock;
-          Serial2.printf("Requested block %04x",shortBlock);
-        }
+        Serial.printf("%02X ",Serial2.read());
       }
-
     }
-
     WaitForIdle();
   }
 }
