@@ -4,11 +4,9 @@
 #define TXD2 21
 
 int i = 0;
-unsigned char data_payload[65535];
 
 unsigned long idleStart;
 unsigned long idleCurrent;
-bool isIdle = false;
 
 void adamNet_rx()
 {
@@ -19,36 +17,30 @@ void setup()
   // Note the format for setting a serial port is as follows: Serial2.begin(baud-rate, protocol, RX pin, TX pin);
   pinMode(TXD2, OUTPUT);
   Serial.begin(921600);
-  Serial2.begin(62500, SERIAL_8N1, RXD2, TXD2);
   Serial.println("Serial Txd is on pin: " + String(TX));
   Serial.println("Serial Rxd is on pin: " + String(RX));
-  Serial.printf("Baud rate is %lu\n", Serial2.baudRate());
   idleStart = millis();
-  while (Serial2.available()) { Serial2.read(); Serial.printf("."); }
 }
 
 void loop()
 {
-  if (Serial2.available())
+  unsigned long start, current;
+  bool isIdle = false;
+
+  do 
   {
-    if (isIdle == true)
+    while (digitalRead(RXD2) == HIGH) { yield(); }
+
+    start = micros();
+    while ((digitalRead(RXD2) == LOW) && (isIdle == false))
     {
-      Serial.printf("AdamNet is doing something.\n");
+      current = micros();
+      if ((current - start) > 2000)
+      {
+        isIdle = true;
+        Serial.printf("Bus is idle.");
+      }
     }
-
-    isIdle = false;
-
-    while (Serial2.available()) { Serial2.read(); } // drain
-
-    idleStart = idleCurrent = millis();
-  }
-  else if (idleCurrent - idleStart > 10)
-  {
-    if (isIdle == false)
-    {
-      Serial.printf("AdamNet is idle.\n");
-      isIdle = true;
-    }
-  }
-  idleCurrent = millis();
+  } 
+  while (isIdle == false);
 }
