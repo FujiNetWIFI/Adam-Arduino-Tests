@@ -197,11 +197,8 @@ void loop()
     unsigned char dev = b & 0x0F;
     unsigned char cmd = b >> 4;
 
-    if (dev == 8)
-    {
-      command(cmd);
-    }
-
+    command(cmd);
+    
     wait_for_idle();
   }
 }
