@@ -17,6 +17,8 @@ void wait_for_idle()
   while (digitalRead(RXD2) == HIGH) 
     yield();
 
+  ets_delay_us(8);
+
   while (cellCount < 10)
   {
     if (digitalRead(RXD2) == LOW)
@@ -35,7 +37,8 @@ byte adamnet_recv()
   // Sample the start bit
   while (digitalRead(RXD2) == LOW)
     yield();
-  ets_delay_us(16);
+  
+  ets_delay_us(24);
 
   // Sample the data bits
   for (unsigned char i = 8; i > 0; --i)

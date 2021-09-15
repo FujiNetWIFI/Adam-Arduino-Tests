@@ -138,6 +138,8 @@ void wait_for_idle()
   while (digitalRead(RXD2) == HIGH)
     yield();
 
+  ets_delay_us(8); // go to middle of bit cell
+
   while (cellCount < 10)
   {
     if (digitalRead(RXD2) == LOW)
@@ -147,6 +149,7 @@ void wait_for_idle()
 
     ets_delay_us(16); // Delay to next bit cell.
   }
+  Serial.printf("\n");
 }
 
 byte adamnet_recv()
@@ -156,7 +159,8 @@ byte adamnet_recv()
   // Sample the start bit
   while (digitalRead(RXD2) == LOW)
     yield();
-  ets_delay_us(16);
+
+  ets_delay_us(24);
 
   // Sample the data bits
   for (unsigned char i = 8; i > 0; --i)
@@ -171,6 +175,8 @@ byte adamnet_recv()
 
   // Sample the stop bit
   ets_delay_us(16);
+
+  Serial.printf("%02X ",incomingByte);
 
   return incomingByte;
 }
@@ -188,13 +194,15 @@ void adamnet_send(byte b)
   ets_delay_us(16);
 
   // Send data bits
-  for (byte mask = 0x01; mask > 0; mask <<= 1)
+  for (byte i=0; i<8; i++)
   {
-    if (b & mask)
-      digitalWrite(TXD2, LOW);
-    else
-      digitalWrite(TXD2, HIGH);
+    if ((b & 0x01) == 0x01)
+      digitalWrite(TXD2,LOW);
+    else 
+      digitalWrite(TXD2,HIGH);
+    
     ets_delay_us(16);
+    b >>= 1;
   }
 
   // Send stop bit.
@@ -218,6 +226,7 @@ void command_control_status()
   Serial.printf("command.control.status() ");
   ets_delay_us(150);
   adamnet_send_bytes(status,sizeof(status));
+  adamnet_recv();
 }
 
 void command_control_ack()
@@ -277,7 +286,7 @@ void setup()
   pinMode(2, OUTPUT);
   pinMode(4, OUTPUT);
   pinMode(13, OUTPUT);
-  digitalWrite(TXD2, HIGH); // So the AdamNet doesn't contend.
+  // digitalWrite(TXD2, HIGH); // So the AdamNet doesn't contend.
   digitalWrite(2, HIGH);
   digitalWrite(4, HIGH);
   digitalWrite(13, HIGH);
@@ -297,42 +306,36 @@ void loop()
     {
     case COMMAND_CONTROL_RESET:
       command_control_reset();
-      wait_for_idle();
     case COMMAND_CONTROL_STATUS:
       command_control_status();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_ACK:
       command_control_ack();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_CTS:
       command_control_cts();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_RECEIVE:
       command_control_receive();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_CANCEL:
       command_control_cancel();
-      wait_for_idle();
       break;
     case COMMAND_DATA_SEND:
       command_data_send();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_NAK:
       command_control_nak();
-      wait_for_idle();
       break;
     case COMMAND_CONTROL_READY:
       command_control_ready();
-      wait_for_idle();
       break;
     default:
       Serial.printf("Unhandled Command: %02X\n",c);
+      wait_for_idle();
       break;
     }
   }
+  else
+    wait_for_idle();
 }
