@@ -131,7 +131,7 @@ void setup()
   pinMode(2, OUTPUT);
   pinMode(4, OUTPUT);
   pinMode(13, OUTPUT);
-  pinMode(TXD1, INPUT);
+  pinMode(TXD1, OUTPUT_OPEN_DRAIN);
 
   digitalWrite(TXD1, HIGH); // So the AdamNet doesn't contend.
   digitalWrite(2, 1); // turn off LEDs

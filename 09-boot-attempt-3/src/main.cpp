@@ -190,23 +190,23 @@ void adamnet_recv_bytes(byte *b, int len)
 void adamnet_send(byte b)
 {
   // Send start bit
-  digitalWrite(TXD2, LOW);
+  digitalWrite(TXD2, HIGH);
   ets_delay_us(16);
 
   // Send data bits
   for (byte i=0; i<8; i++)
   {
-    if ((b & 0x01) == 0x01)
-      digitalWrite(TXD2,LOW);
-    else 
+    if ((b & 0x80) == 0x80)
       digitalWrite(TXD2,HIGH);
+    else 
+      digitalWrite(TXD2,LOW);
     
     ets_delay_us(16);
-    b >>= 1;
+    b <<= 1;
   }
 
   // Send stop bit.
-  digitalWrite(TXD2, HIGH);
+  digitalWrite(TXD2,LOW);
   ets_delay_us(16);
 }
 
@@ -286,7 +286,7 @@ void setup()
   pinMode(2, OUTPUT);
   pinMode(4, OUTPUT);
   pinMode(13, OUTPUT);
-  // digitalWrite(TXD2, HIGH); // So the AdamNet doesn't contend.
+  digitalWrite(TXD2, HIGH); // So the AdamNet doesn't contend.
   digitalWrite(2, HIGH);
   digitalWrite(4, HIGH);
   digitalWrite(13, HIGH);
