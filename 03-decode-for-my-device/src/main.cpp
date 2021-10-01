@@ -40,7 +40,7 @@ void setup()
   digitalWrite(4, 1);
   digitalWrite(13, 1);
   Serial.begin(921600);
-  Serial2.begin(62500,SERIAL_8N1,RXD2,TXD2,false);
+  Serial2.begin(62500,SERIAL_8N1,RXD2,TXD2,true);
   Serial.printf("\n\n\n");
   Serial.println("Serial Txd is on pin: " + String(TX));
   Serial.println("Serial Rxd is on pin: " + String(RX));

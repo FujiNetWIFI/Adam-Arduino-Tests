@@ -194,15 +194,16 @@ void adamnet_send(byte b)
   ets_delay_us(16);
 
   // Send data bits
-  for (byte i=0; i<8; i++)
+  for (int i=0; i<8; i++)
   {
-    if ((b & 0x80) == 0x80)
-      digitalWrite(TXD2,HIGH);
-    else 
+    if ((b & 0x01) == 0x01)
       digitalWrite(TXD2,LOW);
+    else 
+      digitalWrite(TXD2,HIGH);
     
+    b >>= 1;
+
     ets_delay_us(16);
-    b <<= 1;
   }
 
   // Send stop bit.
@@ -223,10 +224,9 @@ void command_control_reset()
 
 void command_control_status()
 {
-  Serial.printf("command.control.status() ");
+  Serial.printf("command.control.status()\n");
   ets_delay_us(150);
   adamnet_send_bytes(status,sizeof(status));
-  adamnet_recv();
 }
 
 void command_control_ack()
@@ -242,7 +242,7 @@ void command_control_cts()
 
 void command_control_receive()
 {
-  Serial.printf("command.control.receive()");
+  Serial.printf("command.control.receive()\n");
   ets_delay_us(150);
   adamnet_send(0x94); // RESPONSE.CONTROL.ACK for DEVICE 4, Tell Adam the block is ready.
 }
@@ -263,7 +263,7 @@ void command_data_send()
   adamnet_send(0x94); // Send ack to ADAM, letting it know we got the send command.
   adamnet_recv_bytes(transferData,sizeof(transferData)); // Get requested block payload
   requestedBlock = (transferData[6] << 24) | (transferData[5] << 16) | (transferData[4] << 8) | transferData[3];
-  Serial.printf("Requested block: %lu", requestedBlock);
+  Serial.printf("Requested block: %lu\n", requestedBlock);
 }
 
 void command_control_nak()
@@ -283,13 +283,6 @@ void setup()
 
   pinMode(RXD2, INPUT);
   pinMode(TXD2, OUTPUT);
-  pinMode(2, OUTPUT);
-  pinMode(4, OUTPUT);
-  pinMode(13, OUTPUT);
-  digitalWrite(TXD2, HIGH); // So the AdamNet doesn't contend.
-  digitalWrite(2, HIGH);
-  digitalWrite(4, HIGH);
-  digitalWrite(13, HIGH);
 
   Serial.printf("\n\n#FujiNet AdamNet test #9 - boot attempt #3.\n\n");
 }
