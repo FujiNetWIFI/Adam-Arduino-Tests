@@ -95,10 +95,19 @@ void command_control_cancel()
 void command_data_send()
 {
   short s = adamnet_recv_length();
+  byte x[8] = {0,0,0,0,0,0,0,0};
+  unsigned long block = 0;
+
   Serial.printf("Max msg size: %u bytes\n\n", s);
+  
   for (short i = 0; i < s; i++)
-    Serial.printf("%02X ", adamnet_recv());
+    x[i] = adamnet_recv();
+
   Serial.printf("Checksum: %02X\n\n", adamnet_recv());
+
+  block = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
+
+  Serial.printf("Req block: %08lx\n",block);
 }
 
 void command_control_nak()
