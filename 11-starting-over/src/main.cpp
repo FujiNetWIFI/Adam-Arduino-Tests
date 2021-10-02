@@ -39,16 +39,16 @@ void wait_for_idle()
       current = micros();
       dur = current - start;
       if (dur > IDLE_TIMEOUT)
-        isIdle=true;
+        isIdle = true;
     }
   } while (isIdle == false);
-  }
+}
 
 byte adamnet_recv()
 {
   while (!Serial1.available())
     yield();
-  
+
   return Serial1.read();
 }
 
@@ -95,11 +95,11 @@ void command_control_cancel()
 void command_data_send()
 {
   short s = adamnet_recv_length();
-  byte x[8] = {0,0,0,0,0,0,0,0};
+  byte x[8] = {0, 0, 0, 0, 0, 0, 0, 0};
   unsigned long block = 0;
 
   Serial.printf("Max msg size: %u bytes\n\n", s);
-  
+
   for (short i = 0; i < s; i++)
     x[i] = adamnet_recv();
 
@@ -107,7 +107,7 @@ void command_data_send()
 
   block = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
 
-  Serial.printf("Req block: %08lx\n",block);
+  Serial.printf("Req block: %08lx\n", block);
 }
 
 void command_control_nak()
@@ -155,14 +155,14 @@ void command_control_ready()
   // Serial.printf("COMMAND.CONTROL_READY\n");
 }
 
-void setup() 
+void setup()
 {
   Serial.begin(921600);
-  Serial1.begin(62500,SERIAL_8N1,RXD2,-1,true);
+  Serial1.begin(62500, SERIAL_8N1, RXD2, -1, true);
   Serial.printf("FujiNet Test #11 - Starting over.\n\n");
 }
 
-void loop() 
+void loop()
 {
   if (!Serial1.available())
     return;
@@ -220,5 +220,4 @@ void loop()
 
   if (c != COMMAND_CONTROL_CTS)
     wait_for_idle();
-
 }
