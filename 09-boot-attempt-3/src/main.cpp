@@ -193,16 +193,17 @@ void adamnet_send(byte b)
   digitalWrite(TXD2, HIGH);
   ets_delay_us(16);
 
-  // Send data bits
-  for (int i=0; i<8; i++)
+  // Send the data bits
+  for (byte mask = 0x01; mask>0; mask<<=1)
   {
-    if ((b & 0x01) == 0x01)
+    if (b & mask)
+    {
       digitalWrite(TXD2,LOW);
-    else 
+    }
+    else
+    {
       digitalWrite(TXD2,HIGH);
-    
-    b >>= 1;
-
+    }
     ets_delay_us(16);
   }
 
