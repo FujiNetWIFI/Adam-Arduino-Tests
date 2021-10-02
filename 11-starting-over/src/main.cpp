@@ -98,7 +98,7 @@ void command_data_send()
   Serial.printf("Max msg size: %u bytes\n\n", s);
   for (short i = 0; i < s; i++)
     Serial.printf("%02X ", adamnet_recv());
-  Serial.printf("Checksum: %02X\n", adamnet_recv());
+  Serial.printf("Checksum: %02X\n\n", adamnet_recv());
 }
 
 void command_control_nak()
@@ -113,7 +113,7 @@ void response_control_status()
   Serial.printf("Max msg size: %u bytes\n", l);
   Serial.printf("Transmit code: %s", (adamnet_recv() == 1) ? "BLOCK MODE\n" : "CHARACTER MODE\n");
   Serial.printf("Device Dependent Status: %02x\n", adamnet_recv());
-  Serial.printf("Checksum: %02x\n", adamnet_recv());
+  Serial.printf("Checksum: %02x\n\n", adamnet_recv());
 }
 
 void response_control_ack()
@@ -133,7 +133,7 @@ void response_data_send()
   Serial.printf("Max msg size: %u bytes\n\n", s);
   for (short i = 0; i < s; i++)
     Serial.printf("%02X ", adamnet_recv());
-  Serial.printf("Checksum: %02X", adamnet_recv());
+  Serial.printf("Checksum: %02X\n\n", adamnet_recv());
 }
 
 void response_control_nak()
