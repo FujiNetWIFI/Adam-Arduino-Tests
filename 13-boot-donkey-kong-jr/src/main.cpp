@@ -26,13 +26,6 @@
 #define RESPONSE_DATA_SEND 0x0B
 #define RESPONSE_CONTROL_NAK 0x0C
 
-bool initialized = false;
-bool responseAcknowledged = false;
-
-fs::File f;
-
-byte block[1024];
-
 byte status[6] =
     {
         0x84,       // response.control.status
@@ -41,6 +34,20 @@ byte status[6] =
         0x40,       // Device dependent status byte
         0x45        // Checksum
 };
+
+byte block[1024];
+unsigned long blocknum=0;
+File f;
+
+byte adamnet_checksum(byte *buf, unsigned short len)
+{
+  byte checksum = 0x00;
+
+  for (unsigned short i = 0; i < len; i++)
+    checksum ^= buf[i];
+
+  return checksum;
+}
 
 void wait_for_idle()
 {
@@ -65,34 +72,12 @@ void wait_for_idle()
   } while (isIdle == false);
 }
 
-byte adamnet_checksum(byte *buf, unsigned short len)
-{
-    byte checksum = 0x00;
-
-    for (unsigned short i = 0; i < len; i++)
-        checksum ^= buf[i];
-
-    return checksum;
-}
-
 byte adamnet_recv()
 {
   while (!Serial1.available())
     yield();
 
   return Serial1.read();
-}
-
-unsigned long adamnet_recv_block()
-{
-  unsigned long b=0;
-
-  b |= adamnet_recv();
-  b |= adamnet_recv() << 8;
-  b |= adamnet_recv() << 16;
-  b |= adamnet_recv() << 24;
-
-  return b & 0xFFFF; // Mask off the top 16 bits.
 }
 
 unsigned short adamnet_recv_length()
@@ -107,13 +92,18 @@ unsigned short adamnet_recv_length()
 
 void adamnet_send(byte b)
 {
+  byte c;
   Serial1.write(b);
 
-  Serial.printf("T:%02X ",b);
   while (!Serial1.available())
     yield();
 
-  Serial1.read();
+  c = Serial1.read();
+
+  if (c != b)
+  {
+    Serial.printf("ERR! Expected %02X got %02X. Waiting 150us\n",b,c);
+  }
 }
 
 void adamnet_send_bytes(byte *b, int len)
@@ -129,145 +119,83 @@ bool is_it_for_me(byte b)
 
 void command_control_status()
 {
-  ets_delay_us(IDLE_TIME);
+  ets_delay_us(150);
   adamnet_send_bytes(status, sizeof(status));
-  responseAcknowledged = false;
-}
-
-void command_control_ack()
-{
-  responseAcknowledged = true;
 }
 
 void command_control_cts()
 {
-  byte ck = adamnet_checksum(block,sizeof(block));
-
-  ets_delay_us(IDLE_TIME);
-  
-  // Send RESPONSE.DATA.SEND
+  ets_delay_us(150);
   adamnet_send(0xB4);
-
-  // Send Message length, currently fixed size at 1024 bytes
-  adamnet_send(0x00);
   adamnet_send(0x04);
-
-  // Send block data
+  adamnet_send(0x00);
   adamnet_send_bytes(block, sizeof(block));
-
-  // Send checksum
-  adamnet_send(ck);
+  adamnet_send(adamnet_checksum(block,sizeof(block)));
 }
 
 void command_control_receive()
 {
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // Acknowledge the receive
-}
-
-void command_control_cancel()
-{
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // Acknowledge
+  ets_delay_us(150);
+  adamnet_send(0x94); // Indicate we received the receive request.
 }
 
 void command_data_send()
 {
   short s = adamnet_recv_length();
-  unsigned long b = adamnet_recv_block();
-  
-  adamnet_recv(); // Grab reserved block. Do not use.
-  adamnet_recv(); // Grab checksum, but do not use it.
+  byte x[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
-  ets_delay_us(IDLE_TIME);
+  for (short i = 0; i < s; i++)
+    x[i] = adamnet_recv();
 
-  if (!f.seek(b * sizeof(block)))
-  {
-    Serial.printf("Could not seek to block %lu - Sending NAK\n",b);
-    adamnet_send(0xC4); // NAK
-    return;
-  }
 
-  if (f.readBytes((char *)block,sizeof(block)) != sizeof(block))
-  {
-    Serial.printf("Could not read block %lu - Sending NAK",b);
-    adamnet_send(0xC4); // NAK
-    return;
-  }
+  blocknum = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
 
-  adamnet_send(0x94); // ACK
-  Serial.printf("Block #%lu\n",b);
-}
-
-void command_control_nak()
-{
-  // Are we supposed to ack here that we got a nak?
+  ets_delay_us(300);
+  adamnet_send(0x94); // Acknowledge that we got the block.
 }
 
 void command_control_ready()
 {
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // ACK
+  f.seek(blocknum*1024);
+  f.readBytes((char *)block,sizeof(block));
+  // ets_delay_us(150); // wait a complete byte length before responding
+  adamnet_send(0x94); // Acknowledge to adam that we are ready.
 }
 
 void process_packet(byte c)
 {
-  switch(c)
+  switch (c)
   {
-    case COMMAND_CONTROL_STATUS:
-      command_control_status();
-      break;
-    case COMMAND_CONTROL_ACK:
-      command_control_ack();
-      break;
-    case COMMAND_CONTROL_CTS:
-      command_control_cts();
-      break;
-    case COMMAND_CONTROL_RECEIVE:
-      command_control_receive();
-      break;
-    case COMMAND_CONTROL_CANCEL:
-      command_control_cancel();
-      break;
-    case COMMAND_DATA_SEND:
-      command_data_send();
-      break;
-    case COMMAND_CONTROL_NAK:
-      command_control_nak();
-      break;
-    case COMMAND_CONTROL_READY:
-      command_control_ready();
-      break;
+  case COMMAND_CONTROL_STATUS: // Adam asking for status
+    command_control_status();
+    break;
+  case COMMAND_CONTROL_CTS: // Adam saying clear to send
+    command_control_cts();
+    break;
+  case COMMAND_CONTROL_RECEIVE: // Adam says it wants to receive
+    command_control_receive();
+    break;
+  case COMMAND_DATA_SEND: // Adam asks us to send a specific block
+    command_data_send();
+    break;
+  case COMMAND_CONTROL_READY: // Adam says it's ready.
+    command_control_ready();
+    break;
   }
 }
 
-void setup() 
+void setup()
 {
-  Serial.begin(921600);
-  Serial1.begin(62500,SERIAL_8N1,RXD2,TXD2,true);
-
-  Serial.printf("\n\n#ColecoAdam #FujiNet Test #13 - Boot Donkey Kong Jr.\n");
-
-  if (!SPIFFS.begin())
-  {
-    Serial.printf("Could not open SPIFFS Storage. Aborting.\n");
-    return;
-  }
-  else
-    Serial.printf("SPIFFS Storage opened.\n");
-
+  pinMode(RXD2,INPUT_PULLDOWN);
+  pinMode(TXD2,OUTPUT);
+  SPIFFS.begin();
   f = SPIFFS.open("/boot.ddp");
-
-  if (!f)
-  {
-    Serial.printf("Could not open file boot.ddp in SPIFFS Storage. Aborting.\n");
-    return;
-  }
-  else
-    Serial.printf("Opened file /boot.ddp for read\n#FUJINET Ready.\n");
+  Serial.begin(921600);
+  Serial1.begin(62500, SERIAL_8N1, RXD2, TXD2, true);
+  Serial.printf("FujiNet Test #11 - Starting over.\n\n");
 }
 
-void loop() 
+void loop()
 {
   byte b = adamnet_recv();
   byte c = b >> 4;
