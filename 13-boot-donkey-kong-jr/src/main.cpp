@@ -26,6 +26,9 @@
 #define RESPONSE_DATA_SEND 0x0B
 #define RESPONSE_CONTROL_NAK 0x0C
 
+byte block[1024];
+unsigned short blockpos=0;
+
 byte status[6] =
     {
         0x84,       // response.control.status
@@ -35,7 +38,6 @@ byte status[6] =
         0x45        // Checksum
 };
 
-byte block[1024];
 unsigned long blocknum=0;
 File f;
 
@@ -74,10 +76,11 @@ void wait_for_idle()
 
 byte adamnet_recv()
 {
-  while (!Serial1.available())
-    yield();
+  byte b[2];
 
-  return Serial1.read();
+  Serial1.readBytes(b,1);
+
+  return b[0];
 }
 
 unsigned short adamnet_recv_length()
@@ -91,25 +94,15 @@ unsigned short adamnet_recv_length()
 }
 
 void adamnet_send(byte b)
-{
-  byte c;
+{    
+  byte c[2];
   Serial1.write(b);
-
-  while (!Serial1.available())
-    yield();
-
-  c = Serial1.read();
-
-  if (c != b)
-  {
-    Serial.printf("ERR! Expected %02X got %02X. Waiting 150us\n",b,c);
-  }
+  Serial1.read(c,1);
 }
 
 void adamnet_send_bytes(byte *b, int len)
 {
-  for (int i = 0; i < len; i++)
-    adamnet_send(b[i]);
+  Serial1.write(b,len);
 }
 
 bool is_it_for_me(byte b)
@@ -125,17 +118,25 @@ void command_control_status()
 
 void command_control_cts()
 {
+  byte c = adamnet_checksum(block,sizeof(block));
+
+  Serial.printf("Sending block...%lu\n",blocknum);
+
   ets_delay_us(150);
   adamnet_send(0xB4);
   adamnet_send(0x04);
   adamnet_send(0x00);
   adamnet_send_bytes(block, sizeof(block));
-  adamnet_send(adamnet_checksum(block,sizeof(block)));
+  adamnet_send(c);
+
 }
 
 void command_control_receive()
 {
-  ets_delay_us(150);
+  f.seek(blocknum*1024,SeekSet);
+  f.read(block,sizeof(block));
+
+  ets_delay_us(80);
   adamnet_send(0x94); // Indicate we received the receive request.
 }
 
@@ -150,15 +151,15 @@ void command_data_send()
 
   blocknum = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
 
-  ets_delay_us(300);
+  Serial.printf("Req %lu\n",blocknum);
+
+  ets_delay_us(150);
   adamnet_send(0x94); // Acknowledge that we got the block.
 }
 
 void command_control_ready()
 {
-  f.seek(blocknum*1024);
-  f.readBytes((char *)block,sizeof(block));
-  // ets_delay_us(150); // wait a complete byte length before responding
+  ets_delay_us(200);
   adamnet_send(0x94); // Acknowledge to adam that we are ready.
 }
 
@@ -190,6 +191,8 @@ void setup()
   pinMode(TXD2,OUTPUT);
   SPIFFS.begin();
   f = SPIFFS.open("/boot.ddp");
+  f.seek(0);
+  f.readBytes((char *)block,sizeof(block));
   Serial.begin(921600);
   Serial1.begin(62500, SERIAL_8N1, RXD2, TXD2, true);
   Serial.printf("FujiNet Test #11 - Starting over.\n\n");
