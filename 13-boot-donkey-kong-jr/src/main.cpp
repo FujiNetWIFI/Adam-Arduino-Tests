@@ -27,7 +27,7 @@
 #define RESPONSE_CONTROL_NAK 0x0C
 
 byte block[1024];
-unsigned short blockpos=0;
+unsigned short blockpos = 0;
 
 byte status[6] =
     {
@@ -38,7 +38,9 @@ byte status[6] =
         0x45        // Checksum
 };
 
-unsigned long blocknum=0;
+unsigned long blocknum = 0;
+unsigned long seeked_blocknum = 0;
+
 File f;
 
 byte adamnet_checksum(byte *buf, unsigned short len)
@@ -60,7 +62,7 @@ void wait_for_idle()
   {
     // Wait for serial line to quiet down.
     while (Serial1.available())
-      Serial1.flush(false);
+      Serial1.read();
 
     start = current = micros();
 
@@ -76,11 +78,10 @@ void wait_for_idle()
 
 byte adamnet_recv()
 {
-  byte b[2];
+  while (!Serial1.available())
+    yield();
 
-  Serial1.readBytes(b,1);
-
-  return b[0];
+  return Serial1.read();
 }
 
 unsigned short adamnet_recv_length()
@@ -94,15 +95,17 @@ unsigned short adamnet_recv_length()
 }
 
 void adamnet_send(byte b)
-{    
-  byte c[2];
-  Serial1.write(b);
-  Serial1.read(c,1);
+{
+  while (!Serial2.availableForWrite())
+    yield();
+
+  Serial2.write(b);
 }
 
 void adamnet_send_bytes(byte *b, int len)
 {
-  Serial1.write(b,len);
+  for (int i = 0; i < len; i++)
+    adamnet_send(b[i]);
 }
 
 bool is_it_for_me(byte b)
@@ -118,9 +121,9 @@ void command_control_status()
 
 void command_control_cts()
 {
-  byte c = adamnet_checksum(block,sizeof(block));
+  byte c = adamnet_checksum(block, sizeof(block));
 
-  Serial.printf("Sending block...%lu\n",blocknum);
+  Serial.printf("Sending block...%lu\n", blocknum);
 
   ets_delay_us(150);
   adamnet_send(0xB4);
@@ -128,13 +131,16 @@ void command_control_cts()
   adamnet_send(0x00);
   adamnet_send_bytes(block, sizeof(block));
   adamnet_send(c);
-
 }
 
 void command_control_receive()
 {
-  f.seek(blocknum*1024,SeekSet);
-  f.read(block,sizeof(block));
+  if (blocknum != seeked_blocknum)
+  {
+    f.seek(blocknum * 1024, SeekSet);
+    f.read(block, sizeof(block));
+    seeked_blocknum = blocknum;
+  }
 
   ets_delay_us(80);
   adamnet_send(0x94); // Indicate we received the receive request.
@@ -148,10 +154,9 @@ void command_data_send()
   for (short i = 0; i < s; i++)
     x[i] = adamnet_recv();
 
-
   blocknum = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
 
-  Serial.printf("Req %lu\n",blocknum);
+  Serial.printf("Req %lu\n", blocknum);
 
   ets_delay_us(150);
   adamnet_send(0x94); // Acknowledge that we got the block.
@@ -187,14 +192,15 @@ void process_packet(byte c)
 
 void setup()
 {
-  pinMode(RXD2,INPUT_PULLDOWN);
-  pinMode(TXD2,OUTPUT);
+  pinMode(RXD2, INPUT_PULLDOWN);
+  pinMode(TXD2, OUTPUT);
   SPIFFS.begin();
   f = SPIFFS.open("/boot.ddp");
   f.seek(0);
-  f.readBytes((char *)block,sizeof(block));
+  f.readBytes((char *)block, sizeof(block));
   Serial.begin(921600);
-  Serial1.begin(62500, SERIAL_8N1, RXD2, TXD2, true);
+  Serial1.begin(62500, SERIAL_8N1, RXD2, -1, true);
+  Serial2.begin(62500, SERIAL_8N1, -1, TXD2, true);
   Serial.printf("FujiNet Test #11 - Starting over.\n\n");
 }
 

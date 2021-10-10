@@ -37,6 +37,9 @@ bool responseAcknowledged = false;
 byte tnfs_fd;
 WiFiUDP UDP;
 byte block[1024];
+unsigned long blocknum;
+unsigned long seekedblocknum;
+
 byte status[6] =
     {
         0x84,       // response.control.status
@@ -48,7 +51,7 @@ byte status[6] =
 
 union
 {
-  struct 
+  struct
   {
     byte session_idl;
     byte session_idh;
@@ -64,39 +67,40 @@ union
  */
 void tnfs_mount()
 {
-  int start=millis();
-  int dur=millis()-start;
-  
-  memset(tnfsPacket.rawData, 0, sizeof(tnfsPacket.rawData));
-  tnfsPacket.session_idl=0;
-  tnfsPacket.session_idh=0;
-  tnfsPacket.retryCount=0;
-  tnfsPacket.command=0;
-  tnfsPacket.data[0]=0x01;   // vers
-  tnfsPacket.data[1]=0x00;   // "  "
-  tnfsPacket.data[2]=0x2F;   // /
-  tnfsPacket.data[3]=0x00;   // nul 
-  tnfsPacket.data[4]=0x00;   // no username
-  tnfsPacket.data[5]=0x00;   // no password
+  int start = millis();
+  int dur = millis() - start;
 
-  UDP.beginPacket(TNFS_SERVER,TNFS_PORT);
-  UDP.write(tnfsPacket.rawData,10);
+  memset(tnfsPacket.rawData, 0, sizeof(tnfsPacket.rawData));
+  tnfsPacket.session_idl = 0;
+  tnfsPacket.session_idh = 0;
+  tnfsPacket.retryCount = 0;
+  tnfsPacket.command = 0;
+  tnfsPacket.data[0] = 0x01; // vers
+  tnfsPacket.data[1] = 0x00; // "  "
+  tnfsPacket.data[2] = 0x2F; // /
+  tnfsPacket.data[3] = 0x00; // nul
+  tnfsPacket.data[4] = 0x00; // no username
+  tnfsPacket.data[5] = 0x00; // no password
+
+  UDP.beginPacket(TNFS_SERVER, TNFS_PORT);
+  UDP.write(tnfsPacket.rawData, 10);
   UDP.endPacket();
 
   while (dur < 5000)
   {
     if (UDP.parsePacket())
     {
-      int l=UDP.read(tnfsPacket.rawData,512);
-      if (tnfsPacket.data[0]==0x00)
+      int l = UDP.read(tnfsPacket.rawData, 512);
+      if (tnfsPacket.data[0] == 0x00)
       {
         // Successful
-        return;  
+        Serial.printf("Mounted\n");
+        return;
       }
       else
       {
         // Error
-        return;  
+        return;
       }
     }
   }
@@ -108,46 +112,47 @@ void tnfs_mount()
  */
 void tnfs_open()
 {
-  int start=millis();
-  int dur=millis()-start;
-  tnfsPacket.retryCount++;  // increase sequence #
-  tnfsPacket.command=0x29;  // OPEN
-  tnfsPacket.data[0]=0x01;  // R/O
-  tnfsPacket.data[1]=0x00;  //
-  tnfsPacket.data[2]=0x00;  // Flags
-  tnfsPacket.data[3]=0x00;  //
-  tnfsPacket.data[4]='/';   // Filename start
-  tnfsPacket.data[5]='b';
-  tnfsPacket.data[6]='o';
-  tnfsPacket.data[7]='o';
-  tnfsPacket.data[8]='t';
-  tnfsPacket.data[9]='.';
-  tnfsPacket.data[10]='d';
-  tnfsPacket.data[11]='d';
-  tnfsPacket.data[12]='p';
-  tnfsPacket.data[13]=0x00; // NUL terminated
-  tnfsPacket.data[14]=0x00; // no username
-  tnfsPacket.data[15]=0x00; // no password
+  int start = millis();
+  int dur = millis() - start;
+  tnfsPacket.retryCount++;   // increase sequence #
+  tnfsPacket.command = 0x29; // OPEN
+  tnfsPacket.data[0] = 0x01; // R/O
+  tnfsPacket.data[1] = 0x00; //
+  tnfsPacket.data[2] = 0x00; // Flags
+  tnfsPacket.data[3] = 0x00; //
+  tnfsPacket.data[4] = '/';  // Filename start
+  tnfsPacket.data[5] = 'b';
+  tnfsPacket.data[6] = 'o';
+  tnfsPacket.data[7] = 'o';
+  tnfsPacket.data[8] = 't';
+  tnfsPacket.data[9] = '.';
+  tnfsPacket.data[10] = 'd';
+  tnfsPacket.data[11] = 'd';
+  tnfsPacket.data[12] = 'p';
+  tnfsPacket.data[13] = 0x00; // NUL terminated
+  tnfsPacket.data[14] = 0x00; // no username
+  tnfsPacket.data[15] = 0x00; // no password
 
-  UDP.beginPacket(TNFS_SERVER,TNFS_PORT);
-  UDP.write(tnfsPacket.rawData,19+4);
+  UDP.beginPacket(TNFS_SERVER, TNFS_PORT);
+  UDP.write(tnfsPacket.rawData, 19 + 4);
   UDP.endPacket();
 
-  while (dur<5000)
+  while (dur < 5000)
   {
     if (UDP.parsePacket())
     {
-      int l=UDP.read(tnfsPacket.rawData,512);
-      if (tnfsPacket.data[0]==0x00)
+      int l = UDP.read(tnfsPacket.rawData, 512);
+      if (tnfsPacket.data[0] == 0x00)
       {
         // Successful
-        tnfs_fd=tnfsPacket.data[1];
+        tnfs_fd = tnfsPacket.data[1];
+        Serial.printf("opened, FD %u\n", tnfs_fd);
         return;
       }
       else
       {
         // unsuccessful
-        return;  
+        return;
       }
     }
   }
@@ -159,26 +164,27 @@ void tnfs_open()
  */
 void tnfs_read()
 {
-  int start=millis();
-  int dur=millis()-start;
-  tnfsPacket.retryCount++;  // Increase sequence
-  tnfsPacket.command=0x21;  // READ
-  tnfsPacket.data[0]=tnfs_fd; // returned file descriptor
-  tnfsPacket.data[1]=0x00;  // 256 bytes
-  tnfsPacket.data[2]=0x01;  //
+  int start = millis();
+  int dur = millis() - start;
+  tnfsPacket.retryCount++;      // Increase sequence
+  tnfsPacket.command = 0x21;    // READ
+  tnfsPacket.data[0] = tnfs_fd; // returned file descriptor
+  tnfsPacket.data[1] = 0x00;    // 256 bytes
+  tnfsPacket.data[2] = 0x01;    //
 
-  UDP.beginPacket(TNFS_SERVER,TNFS_PORT);
-  UDP.write(tnfsPacket.rawData,4+3);
+  UDP.beginPacket(TNFS_SERVER, TNFS_PORT);
+  UDP.write(tnfsPacket.rawData, 4 + 3);
   UDP.endPacket();
 
-  while (dur<5000)
+  while (dur < 5000)
   {
     if (UDP.parsePacket())
     {
-      int l=UDP.read(tnfsPacket.rawData,sizeof(tnfsPacket.rawData));
-      if (tnfsPacket.data[0]==0x00)
+      int l = UDP.read(tnfsPacket.rawData, sizeof(tnfsPacket.rawData));
+      if (tnfsPacket.data[0] == 0x00)
       {
         // Successful
+        Serial.printf("Read 256 bytes\n");
         return;
       }
       else
@@ -195,44 +201,45 @@ void tnfs_read()
  */
 void tnfs_seek(long offset)
 {
-  int start=millis();
-  int dur=millis()-start;
+  int start = millis();
+  int dur = millis() - start;
   byte offsetVal[4];
 
   // This may be sending the bytes in the wrong endian, pls check. Easiest way is to flip the indices.
-  offsetVal[0] = (int)((offset & 0xFF000000) >> 24 );
-  offsetVal[1] = (int)((offset & 0x00FF0000) >> 16 );
-  offsetVal[2] = (int)((offset & 0x0000FF00) >> 8 );
-  offsetVal[3] = (int)((offset & 0X000000FF));  
-  
-  tnfsPacket.retryCount++;
-  tnfsPacket.command=0x25; // LSEEK
-  tnfsPacket.data[0]=tnfs_fd;
-  tnfsPacket.data[1]=0x00; // SEEK_SET
-  tnfsPacket.data[2]=offsetVal[3];
-  tnfsPacket.data[3]=offsetVal[2];
-  tnfsPacket.data[4]=offsetVal[1];
-  tnfsPacket.data[5]=offsetVal[0];
+  offsetVal[0] = (int)((offset & 0xFF000000) >> 24);
+  offsetVal[1] = (int)((offset & 0x00FF0000) >> 16);
+  offsetVal[2] = (int)((offset & 0x0000FF00) >> 8);
+  offsetVal[3] = (int)((offset & 0X000000FF));
 
-  UDP.beginPacket(TNFS_SERVER,TNFS_PORT);
-  UDP.write(tnfsPacket.rawData,6+4);
+  tnfsPacket.retryCount++;
+  tnfsPacket.command = 0x25; // LSEEK
+  tnfsPacket.data[0] = tnfs_fd;
+  tnfsPacket.data[1] = 0x00; // SEEK_SET
+  tnfsPacket.data[2] = offsetVal[3];
+  tnfsPacket.data[3] = offsetVal[2];
+  tnfsPacket.data[4] = offsetVal[1];
+  tnfsPacket.data[5] = offsetVal[0];
+
+  UDP.beginPacket(TNFS_SERVER, TNFS_PORT);
+  UDP.write(tnfsPacket.rawData, 6 + 4);
   UDP.endPacket();
 
-  while (dur<5000)
+  while (dur < 5000)
   {
     if (UDP.parsePacket())
     {
-      int l=UDP.read(tnfsPacket.rawData,sizeof(tnfsPacket.rawData));
+      int l = UDP.read(tnfsPacket.rawData, sizeof(tnfsPacket.rawData));
 
-      if (tnfsPacket.data[0]==0)
+      if (tnfsPacket.data[0] == 0)
       {
         // Success.
-        return;  
+        Serial.printf("seek to: %lu\n", offset);
+        return;
       }
       else
       {
         // Error.
-        return;  
+        return;
       }
     }
   }
@@ -279,18 +286,6 @@ byte adamnet_recv()
   return Serial1.read();
 }
 
-unsigned long adamnet_recv_block()
-{
-  unsigned long b = 0;
-
-  b |= adamnet_recv();
-  b |= adamnet_recv() << 8;
-  b |= adamnet_recv() << 16;
-  b |= adamnet_recv() << 24;
-
-  return b & 0xFFFF; // Mask off the top 16 bits.
-}
-
 unsigned short adamnet_recv_length()
 {
   unsigned short s = 0;
@@ -303,13 +298,10 @@ unsigned short adamnet_recv_length()
 
 void adamnet_send(byte b)
 {
-  Serial1.write(b);
-
-  Serial.printf("T:%02X ", b);
-  while (!Serial1.available())
+  while (!Serial2.availableForWrite())
     yield();
 
-  Serial1.read();
+  Serial2.write(b);
 }
 
 void adamnet_send_bytes(byte *b, int len)
@@ -325,111 +317,85 @@ bool is_it_for_me(byte b)
 
 void command_control_status()
 {
-  ets_delay_us(IDLE_TIME);
+  ets_delay_us(150);
   adamnet_send_bytes(status, sizeof(status));
-  responseAcknowledged = false;
-}
-
-void command_control_ack()
-{
-  responseAcknowledged = true;
 }
 
 void command_control_cts()
 {
-  byte ck = adamnet_checksum(block, sizeof(block));
+  byte c = adamnet_checksum(block, sizeof(block));
 
-  ets_delay_us(IDLE_TIME);
+  Serial.printf("Sending block...%lu\n", blocknum);
 
-  // Send RESPONSE.DATA.SEND
+  ets_delay_us(150);
   adamnet_send(0xB4);
-
-  // Send Message length, currently fixed size at 1024 bytes
-  adamnet_send(0x00);
   adamnet_send(0x04);
-
-  // Send block data
+  adamnet_send(0x00);
   adamnet_send_bytes(block, sizeof(block));
-
-  // Send checksum
-  adamnet_send(ck);
+  adamnet_send(c);
 }
 
 void command_control_receive()
 {
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // Acknowledge the receive
-}
+  if (blocknum != seekedblocknum)
+  {
+    tnfs_seek(blocknum * 1024);
 
-void command_control_cancel()
-{
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // Acknowledge
+    // recombine 1024 byte block from 4 TNFS packets.
+    tnfs_read();
+    memcpy(&block[0], &tnfsPacket.data[3], 256);
+    tnfs_read();
+    memcpy(&block[256], &tnfsPacket.data[3], 256);
+    tnfs_read();
+    memcpy(&block[512], &tnfsPacket.data[3], 256);
+    tnfs_read();
+    memcpy(&block[768], &tnfsPacket.data[3], 256);
+    seekedblocknum = blocknum;
+  }
+
+  ets_delay_us(80);
+  adamnet_send(0x94); // Indicate we received the receive request.
 }
 
 void command_data_send()
 {
   short s = adamnet_recv_length();
-  unsigned long b = adamnet_recv_block();
+  byte x[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
-  adamnet_recv(); // Grab reserved block. Do not use.
-  adamnet_recv(); // Grab checksum, but do not use it.
+  for (short i = 0; i < s; i++)
+    x[i] = adamnet_recv();
 
-  ets_delay_us(IDLE_TIME);
+  blocknum = x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0];
 
-  tnfs_seek(b * sizeof(block));
-  
-  // recombine 1024 byte block from 4 TNFS packets.
-  tnfs_read();
-  memcpy(&block[0],&tnfsPacket.data[3],256);
-  tnfs_read();
-  memcpy(&block[256],&tnfsPacket.data[3],256);
-  tnfs_read();
-  memcpy(&block[512],&tnfsPacket.data[3],256);
-  tnfs_read();
-  memcpy(&block[768],&tnfsPacket.data[3],256);
+  Serial.printf("Req %lu\n", blocknum);
 
-  adamnet_send(0x94); // ACK
-  Serial.printf("Block #%lu\n", b);
-}
-
-void command_control_nak()
-{
-  // Are we supposed to ack here that we got a nak?
+  ets_delay_us(150);
+  adamnet_send(0x94); // Acknowledge that we got the block.
 }
 
 void command_control_ready()
 {
-  ets_delay_us(IDLE_TIME);
-  adamnet_send(0x94); // ACK
+  ets_delay_us(200);
+  adamnet_send(0x94); // Acknowledge to adam that we are ready.
 }
 
 void process_packet(byte c)
 {
   switch (c)
   {
-  case COMMAND_CONTROL_STATUS:
+  case COMMAND_CONTROL_STATUS: // Adam asking for status
     command_control_status();
     break;
-  case COMMAND_CONTROL_ACK:
-    command_control_ack();
-    break;
-  case COMMAND_CONTROL_CTS:
+  case COMMAND_CONTROL_CTS: // Adam saying clear to send
     command_control_cts();
     break;
-  case COMMAND_CONTROL_RECEIVE:
+  case COMMAND_CONTROL_RECEIVE: // Adam says it wants to receive
     command_control_receive();
     break;
-  case COMMAND_CONTROL_CANCEL:
-    command_control_cancel();
-    break;
-  case COMMAND_DATA_SEND:
+  case COMMAND_DATA_SEND: // Adam asks us to send a specific block
     command_data_send();
     break;
-  case COMMAND_CONTROL_NAK:
-    command_control_nak();
-    break;
-  case COMMAND_CONTROL_READY:
+  case COMMAND_CONTROL_READY: // Adam says it's ready.
     command_control_ready();
     break;
   }
@@ -439,21 +405,39 @@ void setup()
 {
   Serial.begin(921600);
   Serial1.begin(62500, SERIAL_8N1, RXD2, TXD2, true);
+  Serial2.begin(62500, SERIAL_8N1, -1, TXD2, true);
 
   Serial.printf("\n\n#ColecoAdam #FujiNet Test #14 - TNFS Boot Donkey Kong Jr.\n");
 
   Serial.printf("Connecting to Network...");
-
-  WiFi.begin("SSID", "PASSWORD");
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  WiFi.scanNetworks();
+  // WiFi.begin("iPhone", "ac1xtzatqu8ri");
+  WiFi.begin("iPhone-FFWG81EPN72Q","3016520488");
 
   while (WiFi.status() != WL_CONNECTED)
   {
+    Serial.printf("wifi status: %u\n", WiFi.status());
     delay(10);
   }
 
   Serial.printf("Connected!\n\n");
 
   UDP.begin(16384);
+  tnfs_mount();
+  tnfs_open();
+
+  tnfs_read();
+  memcpy(&block[0], &tnfsPacket.data[3], 256);
+  tnfs_read();
+  memcpy(&block[256], &tnfsPacket.data[3], 256);
+  tnfs_read();
+  memcpy(&block[512], &tnfsPacket.data[3], 256);
+  tnfs_read();
+  memcpy(&block[768], &tnfsPacket.data[3], 256);
+
+  Serial.printf("Read first block.\n");
 
   Serial.printf("Opened file /boot.ddp for read\n#FUJINET Ready.\n");
 }
